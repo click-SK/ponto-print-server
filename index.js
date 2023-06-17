@@ -11,11 +11,12 @@ import BlogRouter from './router/Blogrouter.js';
 import UserRouter from './router/UserRouter.js';
 import CalculatorRouter from './router/CalculatorRouter.js';
 import TableRouter from './router/TableRouter.js';
-import Table from './models/Table.js'
+import Table from './models/Table.js';
 
 import * as TranslationsUaController from './controllers/TranslationsUaController.js';
 import * as TranslationsRuController from './controllers/TranslationsRuController.js';
 import * as CurrenyController from './controllers/CurrenyController.js';
+import * as TableController from './controllers/TableController.js';
 
 const kyivTime = moment().tz('Europe/Kiev');
 const startTime = moment(kyivTime).set({ hour: 7, minute: 0, second: 0 }).valueOf();
@@ -68,6 +69,10 @@ setInterval(() => {
   }
 }, 1800000);
 
+setInterval(() => {
+  TableController.checkedLongTimeFile();
+}, 86400000);
+
 const runFunc = async () => {
   try {
     await client.connect();
@@ -90,18 +95,37 @@ const runFunc = async () => {
       });
     });
 
-    changeStream.on("change", (next) => {
+    changeStream.on("change", async (next) => {
       switch (next.operationType) {
         case "insert":
           const { user } = next.fullDocument;
+          console.log('next.fullDocument',next.fullDocument);
           console.log('user iD', user);
           io.emit('new table', {user: user});
           console.log("table update", user);
           break;
         case "update":
-          const updatedTableUser = next.updateDescription.updatedFields.user;
-          io.emit("update table", {user: updatedTableUser});
-          console.log("update", updatedTableUser);
+          const { _id } = next.documentKey;
+          const finalObject = next.updateDescription.updatedFields;
+          let songStatus = false
+          console.log('_id',_id);
+          const updatedDocument = await Table.findById(_id);
+          console.log('updatedDocument',updatedDocument.user);
+
+          for (const key in finalObject) {
+            if (finalObject.hasOwnProperty(key)) {
+              const value = finalObject[key];
+              if(key == 'status.currentStatus') {
+                if(value == 'delete') {
+                  songStatus = true;
+                }
+              }
+            }
+          }
+
+          io.emit("update table", {user: updatedDocument.user, status: songStatus});
+          
+          console.log("update", next.updateDescription.updatedFields);
           break;
       }
     });
