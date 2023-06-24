@@ -12,7 +12,7 @@ export const getCurrency = async (req,res) => {
 
 export const createDefaultCurrency = async (req, res) => {
     try {
-      const valueResponse = await fetch('http://localhost:4444/get-currency');
+      const valueResponse = await fetch('https://server-ponto-print.herokuapp.com/get-currency');
       const valueData = await valueResponse.json();
       const value = valueData[0]?.value;
   
@@ -21,8 +21,6 @@ export const createDefaultCurrency = async (req, res) => {
       const response = await fetch('https://api.privatbank.ua/p24api/pubinfo?json&exchange&coursid=5');
       const responseData = await response.json();
       const currencyData = responseData[1];
-
-      console.log('currencyData',currencyData);
   
       const resoult = currencyData.sale * value;
   
@@ -44,7 +42,7 @@ export const createDefaultCurrency = async (req, res) => {
 
         const currencyId = '646faf6bd812a1a42ea8129d';
 
-        const response = await fetch('http://localhost:4444/get-currency')
+        const response = await fetch('https://server-ponto-print.herokuapp.com/get-currency')
         .then((res) => res.json())
         .then((res) => res[0]?.banckCurrency)
 
