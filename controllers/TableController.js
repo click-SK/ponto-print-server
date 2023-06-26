@@ -12,9 +12,8 @@ export const createTable = async (req, res) => {
 
         const newStatus = JSON.parse(status);
         const newConditions = JSON.parse(conditions);
-        console.log('newStatus',newStatus);
+        console.log('newConditions',newConditions);
 
-        // const userId = req.user._id;
         const user = await UserModel.findById(userId);
 
         const lastTable = await TableModel.findOne({}, {}, { sort: { id: -1 } });
@@ -74,11 +73,11 @@ export const createTable = async (req, res) => {
                 break;
           }
 
-        const newFileName = `${id}_${user.name}_${materialname}_${quality ? quality : color}_${width}x${height}mm_${count}шт${newConditions?.lamination?.name && '_Ламінація: ' + newConditions.lamination.name}
-        ${newConditions?.cutting?.name && '_Порізка: ' + newConditions.cutting.name }${newConditions?.eyelets?.name && '_Люверси: ' + newConditions.eyelets.name} 
-        ${newConditions?.mounting?.name && '_Монтування: ' + newConditions.mounting.name}${newConditions?.poster?.name && '_Постер: ' + newConditions.poster.name}
-        ${newConditions?.solderGates?.name && '_Пропайка підворотів: ' + newConditions.solderGates.name}${newConditions?.solderPockets?.name && '_Пропайка карманів: ' + newConditions.solderPockets.name}
-        ${newConditions?.stamp?.name && '_Штамп: ' + newConditions.stamp.name}${newConditions?.stretch?.name && '_Натяжка на підрамник: ' + newConditions.stretch.name}`.trim()
+        const newFileName = `${id}_${user.name}_${materialname}_${quality ? quality : color}_${width}x${height}mm_${count}шт${newConditions?.lamination?.name && '_Ламинация_ ' + newConditions.lamination.name}
+        ${newConditions?.cutting?.name && '_Порезка_ ' + newConditions.cutting.name }${newConditions?.eyelets?.name && '_Люверсы_ ' + newConditions.eyelets.name} 
+        ${newConditions?.mounting?.name && '_Монтирование_ ' + newConditions.mounting.name}${newConditions?.poster?.name && '_Постер_ ' + newConditions.poster.name}
+        ${newConditions?.solderGates?.name && '_Пропайка-подворотов_ ' + newConditions.solderGates.name}${newConditions?.solderPockets?.name && '_Пропайка-карманов_ ' + newConditions.solderPockets.name}
+        ${newConditions?.stamp?.name && '_Штамп_ ' + newConditions.stamp.name}${newConditions?.stretch?.name && '_Натяжка-на-подрамник_ ' + newConditions.stretch.name}${newConditions?.bilateral?.name && '_Двусторонний '}`.trim()
         const fileExtension = req.file.originalname.split('.').pop();
 
         const invalidCharacters = /[<>:"\\/|?*.]/g;
@@ -108,11 +107,6 @@ export const createTable = async (req, res) => {
 
       user.orders.push(data._id); // Додайте ідентифікатор замовлення до масиву `orders`
       await user.save(); // Збережіть оновлену модель користувача
-    //   const invalidCharacters = /[<>:"\\/|?*.]/g;
-    //   const cleanedStr = newFileName.replace(/\s/g, "").replace(invalidCharacters, "");
-    //   console.log(cleanedStr + '.' + fileExtension);
-
-console.log('gluedStr',gluedStr);
       
       fs.rename(`./uploadsFile/${req.file.originalname}`, `./uploadsFile/${cleanedStr}.${fileExtension}`, (err) => {
         if (err) throw err; // не удалось переименовать файл
@@ -139,7 +133,6 @@ export const downloadFile = async (req, res) => {
 
     if (filePath) {
       return res.download(filePath);
-      // return res.attachment(table.file).sendFile(filePath);
     }
     return res.status(400).json({ message: "Dowload error" });
   } catch (e) {
