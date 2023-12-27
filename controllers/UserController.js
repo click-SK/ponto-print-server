@@ -1,9 +1,12 @@
 import UserModel from '../models/User.js';
-import moment from 'moment';
+// import moment from 'moment';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import nodemailer from 'nodemailer';
 import validator from 'validator';
+import moment from "moment-timezone";
+const kyivTime = moment().tz("Europe/Kiev");
+
 
 const JWT_SECRET = 'secret';
 
@@ -17,6 +20,7 @@ export const register = async (req, res) => {
         const user = await UserModel.create({
             email,
             name,
+            address: [],
             isAdmin: false,
             balance: 0,
             discount: false,
@@ -41,11 +45,31 @@ export const register = async (req, res) => {
             }
           });
 
+          // let mailOptions = {
+          //   from: 'ponto-print@ukr.net', // електронна адреса, з якої відправляється лист
+          //   to: email, // електронна адреса отримувача
+          //   subject: 'Рєстрація пройшла успішно', // тема листа
+          //   text: `Ласкаво просимо до ponto-print. Ваш логін: ${name}; Ваш пароль: ${password}`,
+          //   html: 
+          //   `
+          //   <div>
+          //   <h3>Наша адресса:</h3>
+          //   <a href='http://ponto-print.com.ua'>http://ponto-print.com.ua</a>
+          //   </div>
+          //   `
+          // };
           let mailOptions = {
             from: 'ponto-print@ukr.net', // електронна адреса, з якої відправляється лист
             to: email, // електронна адреса отримувача
             subject: 'Рєстрація пройшла успішно', // тема листа
-            text: `Ласкаво просимо до ponto-print. Ваш логін: ${name}; Ваш пароль: ${password}` // текст листа
+            html: 
+            `
+            <div>
+            <h3>Наша адресса:</h3>
+            <p>Ласкаво просимо до ponto-print. Ваш логін: ${name}; Ваш пароль: ${password}</p>
+            <a href='http://ponto-print.com.ua'>http://ponto-print.com.ua</a>
+            </div>
+            `
           };
 
           if(validator.isEmail(email)) {
@@ -119,7 +143,10 @@ export const login = async (req, res) => {
 
 export const updateBalance = async (req, res) => {
   try {
-      const { value, userId, action, historyValue } = req.body;
+      const { value, userId, action, historyValue, balance, debt } = req.body;
+
+      console.log('balance',balance);
+      console.log('debt',debt);
 
       const user = await UserModel.findById(userId);
 
@@ -127,12 +154,16 @@ export const updateBalance = async (req, res) => {
           return res.status(404).json({ error: 'Користувач не знайдений' });
       }
 
-      const date = moment().utcOffset(3).format('YYYY-MM-DD HH:mm:ss');
+      // const date = moment().utcOffset(3).format('YYYY-MM-DD HH:mm:ss');
+
+      const formattedDateTime = kyivTime.format("DD.MM.YYYY HH:mm:ss");
 
       const newBalanceHistory = [...user.balanceHistory, {
           historyValue,
-          date,
-          action
+          date: formattedDateTime,
+          action,
+          balance,
+          debt
       }];
 
       const data = await UserModel.updateOne(
@@ -208,6 +239,24 @@ export const updateDisabledStatus = async (req, res) => {
     console.log(e);
 }
 }
+export const updateDisabledPaymantStatus = async (req, res) => {
+  try{
+    const {value, userId} = req.body;
+
+    console.log('WOrk');
+
+    const data = await UserModel.updateOne(
+        {_id: userId},
+        {
+          disabledPaymant: value,
+        }
+    )
+
+    res.json(data);
+} catch(e) {
+    console.log(e);
+}
+}
 
 export const removeUser = async (req, res) => {
     try {
@@ -225,11 +274,89 @@ export const removeUser = async (req, res) => {
 export const getAll = async (req, res) => {
   try {
     const allData = await UserModel.find().populate('orders');
+    console.log('allData',allData);
     res.json(allData);
   } catch (error) {
     console.log(error);
   }
 }
+
+export const getAllOnlyUser = async (req, res) => {
+  try {
+    const allData = await UserModel.find();
+    console.log('allData',allData);
+    res.json(allData);
+  } catch (error) {
+    console.log(error);
+  }
+}
+
+export const getAllUserPagination = async (req, res) => {
+  try {
+    const { page, limit } = req.query;
+    const skip = parseInt(page - 1) * parseInt(limit); // Переконайтеся, що ці значення є числами
+
+    const query = {
+      isAdmin: { $ne: true }
+    };
+
+    // Використання агрегаційного пайплайну для сортування без урахування регістру
+    let allData = await UserModel.aggregate([
+      { $match: query },
+      { $addFields: { nameLower: { $toLower: "$name" } } },
+      { $sort: { nameLower: 1 } },
+      { $skip: skip },
+      { $limit: parseInt(limit) },
+      { $lookup: { from: 'tables', localField: 'orders', foreignField: '_id', as: 'orders' } }
+    ]);
+
+    console.log('allData',allData);
+
+    // Відправка відсортованих даних
+    res.json(allData);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: 'Помилка сервера' });
+  }
+}
+
+// export const getAllUsersName = async (req, res) => {
+//   try {
+
+//     // Використання агрегаційного пайплайну для сортування без урахування регістру
+//     let allData = await UserModel.find().populate('user');
+
+//     // Відправка відсортованих даних
+//     res.json(allData);
+//   } catch (error) {
+//     console.log(error);
+//     res.status(500).json({ error: 'Помилка сервера' });
+//   }
+// }
+
+export const getAllUsersName = async (req, res) => {
+  try {
+    // Використання агрегаційного пайплайну для отримання і сортування імен користувачів
+    const allUsers = await UserModel.aggregate([
+      { 
+        $addFields: { nameLower: { $toLower: "$name" } }  // Додає поле nameLower у нижньому регістрі
+      },
+      { 
+        $sort: { nameLower: 1 }  // Сортує за полем nameLower
+      },
+      {
+        $project: { name: 1, _id: 0 }  // Відображає тільки імена користувачів
+      },
+    ]);
+
+    // Відправка відсортованих даних
+    res.json(allUsers);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: 'Помилка сервера' });
+  }
+}
+
 
 export const getMe = async (req, res) => {
   try {
@@ -274,5 +401,79 @@ export const updatePassword = async (req, res) => {
   } catch (error) {
     console.error('Помилка зміни пароля користувача:', error);
     res.status(500).json({ message: 'Не вдалося змінити пароль користувача' });
+  }
+};
+
+// export const updateUserAddress = async (req, res) => {
+//   try {
+//       const { userId, newValue} = req.body;
+//       console.log('userId',userId);
+//       console.log('newValue',newValue);
+
+//       const data = await UserModel.updateOne(
+//           {_id: userId},
+//           {
+//               address: newValue,
+//           }
+//       )
+  
+//       res.json(data);
+
+//   } catch (e) {
+//       console.log(e);
+//       res.status(500).json({
+//           message: "Error updating address"
+//       });
+//   }
+// }
+
+
+export const addAddressToUser = async (req,res) => {
+  try {
+    const { userId, newValue} = req.body;
+    // Знайдіть користувача за його ідентифікатором (userId)
+    const user = await UserModel.findById(userId);
+
+    if (!user) {
+      throw new Error("Користувача не знайдено");
+    }
+
+    // Додайте нову адресу до масиву address
+    user.address.push(newValue);
+
+    // Збережіть зміни
+    await user.save();
+
+    return user;
+  } catch (error) {
+    throw new Error("Помилка при додаванні адреси до користувача: " + error.message);
+  }
+}
+
+export const removeAddressFromUser = async (req, res) => {
+  try {
+    const { userId, addressIndex } = req.body;
+    // Знайдіть користувача за його ідентифікатором (userId)
+    const user = await UserModel.findById(userId);
+
+    if (!user) {
+      throw new Error("Користувача не знайдено");
+    }
+
+    // Знайдіть індекс адреси, яку потрібно видалити
+
+    if (addressIndex === -1) {
+      throw new Error("Адресу не знайдено");
+    }
+
+    // Видаліть адресу з масиву address за індексом addressIndex
+    user.address.splice(addressIndex, 1);
+
+    // Збережіть зміни
+    await user.save();
+
+    return user;
+  } catch (error) {
+    throw new Error("Помилка при видаленні адреси з користувача: " + error.message);
   }
 };

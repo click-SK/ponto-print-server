@@ -1,10 +1,11 @@
 import TableModel from '../models/Table.js';
 import UserModel from "../models/User.js";
-import moment from 'moment';
+// import moment from 'moment';
 import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
-import Table from '../models/Table.js';
+import moment from "moment-timezone";
+const kyivTime = moment().tz("Europe/Kiev");
 
 export const createTable = async (req, res) => {
     try {
@@ -12,14 +13,13 @@ export const createTable = async (req, res) => {
 
         const newStatus = JSON.parse(status);
         const newConditions = JSON.parse(conditions);
-        console.log('newConditions',newConditions);
 
         const user = await UserModel.findById(userId);
 
         const lastTable = await TableModel.findOne({}, {}, { sort: { id: -1 } });
         const id = (lastTable && lastTable.id) ? lastTable.id + 1 : 1;
 
-        const date = moment().utcOffset(3).format('YYYY-MM-DD HH:mm:ss');
+        // const date = moment().utcOffset(3).format('YYYY-MM-DD HH:mm:ss');
 
         let materialname = '';
         
@@ -102,10 +102,15 @@ export const createTable = async (req, res) => {
         // Склеювання тексту без пробілів
         const gluedStr = cleanedStr.split(" ").join("");
 
+        const originalFilename = Buffer.from(req.file.originalname, 'binary').toString('utf8');
+
+        const formattedDateTime = kyivTime.format("DD.MM.YYYY HH:mm:ss");
+
         const data = await TableModel.create({
             id,
             file: `/uploadsFile/${gluedStr}.${fileExtension}`,
             fileName: newFileName,
+            originalFileName: originalFilename,
             material,
             quality,
             width,
@@ -114,7 +119,7 @@ export const createTable = async (req, res) => {
             sum,
             conditions: newConditions,
             status: newStatus,
-            date,
+            date: formattedDateTime,
             user,
             notes,
             address,
@@ -142,10 +147,15 @@ export const downloadFile = async (req, res) => {
   try {
     const id = req.query.id;
     const table = await TableModel.findById(id);
-    console.log("Work ");
+
     const __filename = fileURLToPath(import.meta.url);
+
     const __dirname = dirname(__filename);
+
+
     const filePath = path.join(__dirname, "..", table.file); // Отримайте шлях до файлу
+
+    console.log('filePath',filePath);
 
     if (filePath) {
       return res.download(filePath);
@@ -160,7 +170,7 @@ export const downloadFile = async (req, res) => {
 export const updateStatus = async (req, res) => {
   try {
       const { tableId, value, name, paid, descriptionDelete } = req.body;
-      console.log('descriptionDelete',descriptionDelete);
+      console.log('update table status');
 
       const table = await TableModel.findById(tableId);
       if (!table) {
@@ -168,7 +178,7 @@ export const updateStatus = async (req, res) => {
               message: 'Table not found'
           });
       }
-      table.descriptionDelete = descriptionDelete;
+      table.descriptionDelete = descriptionDelete ? descriptionDelete : '';
       table.status.currentStatus = value;
       table.status.name = name;
       table.status.paid = paid;
@@ -187,12 +197,8 @@ export const updateUserStatus = async (req, res) => {
   try {
       const { tableId, value, name, } = req.body;
 
-      console.log('tableId',tableId);
-      console.log('value',value);
-      console.log('name',name);
-
       const table = await TableModel.findById(tableId);
-      console.log('table.status.currentStatus',table.status.currentStatus);
+
       if (!table) {
           return res.status(404).json({
               message: 'Table not found'
@@ -219,20 +225,26 @@ export const updateUserStatus = async (req, res) => {
 }
 
   export const getAllTables = async (req, res) => {
-    try{
-    const tables = await TableModel.find().populate('user');
-    
-        res.json(tables)
-      } catch(e) {
-        console.log(e);
-      }
-  }
+    try {
+      const { page, limit } = req.query;
+      const skip = (page - 1) * limit;
+      const tables = await TableModel.find()
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("user");
+
+      res.json(tables);
+    } catch (e) {
+      console.log(e);
+    }
+  };
 
   export const checkedLongTimeFile = async (req, res) => {
     try {
         const currentDate = new Date(); // Поточна дата
 
-        const tables = await Table.find().select('createdAt file');
+        const tables = await TableModel.find().select('createdAt file');
         tables.filter((el) => {
             const createdAt = el.createdAt; // Дата створення з MongoDB
             const file = el.file;
@@ -250,5 +262,188 @@ export const updateUserStatus = async (req, res) => {
         });
     } catch (e) {
         console.log('Error', e);
+    }
+}
+
+export const updateTableSum = async (req, res) => {
+    try {
+        const { tableId, newValue} = req.body;
+        console.log('tableId',tableId);
+        console.log('newValue',newValue);
+
+        const data = await TableModel.updateOne(
+            {_id: tableId},
+            {
+                sum: newValue,
+            }
+        )
+    
+        res.json(data);
+
+    } catch (e) {
+        console.log(e);
+        res.status(500).json({
+            message: "Error updating sum"
+        });
+    }
+  }
+
+
+  export const downloadProgram = async (req, res) => {
+    try {
+      const localPathFile = '/download-program/TiffInfo.rar';
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+      console.log('__dirname',__dirname);
+  
+      const filePath = path.join(__dirname, "..", localPathFile); // Отримайте шлях до файлу
+  
+      console.log('filePath',filePath);
+  
+      if (filePath) {
+        return res.download(filePath);
+      }
+      return res.status(400).json({ message: "Dowload error" });
+    } catch (e) {
+      console.log(e);
+      res.status(500).json({ message: "Upload error" });
+    }
+  };
+
+  export const deleteCollection = async (req, res) => {
+    console.log('work');
+    try {
+      await TableModel.deleteMany({}); // Видалити всі документи у колекції
+      res.json({ message: 'Колекцію успішно видалено' });
+    } catch (error) {
+      console.log(error);
+      res.status(500).json({ error: 'Помилка при видаленні колекції' });
+    }
+  };
+
+  export const sortByUserName = async (req, res) => {
+    try {
+        const {name, page, limit} = req.query;
+        const skip = (page - 1) * limit;
+        const user = await UserModel.findOne({name});
+        if(!user) {
+            res.status(404).json({ error: 'Користувача не знайдено' });
+            return;
+        }
+        const userId = user._id;
+
+        const tables = await TableModel.find({user: userId})
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("user");
+
+        if(!tables) {
+            res.status(404).json({ error: 'Таблиць не знайдено' });
+        }
+
+        res.json(tables);
+    } catch(error) {
+        console.log(error);
+        res.status(404).json({ error: 'Користувача не знайдено' });
+    }
+  }
+
+  export const sortByStatus = async (req, res) => {
+    try {
+        const {status, page, limit} = req.query;
+        const skip = (page - 1) * limit;
+        const tables = await TableModel.find({"status.name": status})
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("user");
+
+        if(!tables) {
+            res.status(404).json({ error: 'Таблиць не знайдено' });
+        }
+
+        console.log('tables',tables);
+
+        res.json(tables);
+    } catch(error) {
+        console.log(error);
+        res.status(404).json({ error: 'Користувача не знайдено' });
+    }
+  }
+
+
+export const sortByDate = async (req, res) => {
+    try {
+        const { date } = req.query;
+
+        console.log('date', date);
+
+        const tables = await TableModel.aggregate([
+            {
+                $addFields: {
+                    // Форматування дати у рядок
+                    formattedDate: {
+                        $dateToString: { format: "%Y-%m-%d", date: { $dateFromString: { dateString: "$date" } } }
+                    }
+                }
+            },
+            {
+                $match: {
+                    formattedDate: date
+                }
+            },
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "user",
+                    foreignField: "_id",
+                    as: "user"
+                }
+            },
+            {
+                $unwind: {
+                    path: "$user",
+                    preserveNullAndEmptyArrays: true // Для випадків, коли у користувача немає запису
+                }
+            }
+        ]);
+
+        console.log('tables', tables);
+
+        if (tables.length === 0) {
+            return res.status(404).json({ error: 'Таблиць не знайдено' });
+        }
+
+        res.json(tables);
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ error: 'Помилка сервера' });
+    }
+};
+
+
+export const getTablesForUser = async (req, res) => {
+    try {
+        console.log('getTablesForUser');
+        const { page, limit, id } = req.query;
+        const skip = (page - 1) * limit;
+        const tables = await TableModel.find({user: id})
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+
+        if (!tables) {
+            return res.status(404).json({
+                message: 'Table not found'
+            });
+        }
+
+        console.log('tables',tables);
+
+        res.json(tables);
+  
+    } catch(error) {
+        console.log(error);
     }
 }
